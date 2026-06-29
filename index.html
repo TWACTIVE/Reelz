@@ -117,14 +117,18 @@
     <p class="tagline">Recreate any Instagram Reel using your own camera roll clips — local CLI, no login required.</p>
 
     <h2>Quick Start</h2>
-    <pre><span class="comment"># 1. Install dependencies</span>
+    <pre><span class="comment"># 1. Clone the repo</span>
+<span class="cmd">git clone</span> https://github.com/twactive/Reelz.git
+<span class="cmd">cd</span> Reelz
+
+<span class="comment"># 2. Install dependencies</span>
 <span class="cmd">brew install</span> <span class="arg">yt-dlp ffmpeg</span>
 <span class="cmd">pip install</span> <span class="arg">anthropic</span>
 
-<span class="comment"># 2. Set your Anthropic API key</span>
+<span class="comment"># 3. Set your Anthropic API key</span>
 <span class="cmd">export</span> <span class="arg">ANTHROPIC_API_KEY</span>=sk-ant-...
 
-<span class="comment"># 3. Run</span>
+<span class="comment"># 4. Run</span>
 <span class="cmd">python</span> recreate_reel.py <span class="arg">"https://www.instagram.com/reels/XXXX/"</span> \
   --clips <span class="arg">./my_camera_roll</span></pre>
 

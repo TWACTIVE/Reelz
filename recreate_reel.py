@@ -187,18 +187,22 @@ def detect_shots(video: Path, threshold: float = 0.3) -> list[dict]:
     print(f"\n[2/8] Detecting scene cuts (threshold={threshold})")
     duration = video_duration(video)
 
-    r = run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json",
-         "-show_frames", "-f", "lavfi",
-         f"movie={str(video).replace(chr(92), '/')},select=gt(scene\\,{threshold})",
-         "-show_entries", "frame=pts_time,pkt_pts_time"],
-        capture=True,
+    # Use ffmpeg to write scene scores to stderr, parse timestamps from output
+    r = subprocess.run(
+        ["ffmpeg", "-i", str(video),
+         "-vf", f"select=gt(scene\\,{threshold}),showinfo",
+         "-vsync", "vfr", "-f", "null", "-"],
+        capture_output=True, text=True,
     )
-    data = json.loads(r.stdout)
-    cut_times = [
-        float(f.get("pts_time") or f.get("pkt_pts_time", 0))
-        for f in data.get("frames", [])
-    ]
+    cut_times = []
+    for line in r.stderr.splitlines():
+        if "showinfo" in line and "pts_time:" in line:
+            try:
+                ts = float(line.split("pts_time:")[1].split()[0])
+                cut_times.append(ts)
+            except (IndexError, ValueError):
+                pass
+
     cut_times = [0.0] + sorted(set(cut_times)) + [duration]
 
     shots = []

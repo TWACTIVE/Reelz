@@ -144,7 +144,7 @@ def describe_shot(client: anthropic.Anthropic, frames: list[Path], duration: flo
 
 # ── step 1: download ───────────────────────────────────────────────────────────
 
-def download_reel(url: str, cookies_from_browser: str | None = None) -> Path:
+def download_reel(url: str, cookies_from_browser: str | None = None, cookies: str | None = None) -> Path:
     print(f"\n[1/8] Downloading reel from {url}")
     slug = hashlib.md5(url.encode()).hexdigest()[:8]
     out_template = str(DOWNLOADS_DIR / f"{slug}.%(ext)s")
@@ -152,6 +152,8 @@ def download_reel(url: str, cookies_from_browser: str | None = None) -> Path:
            "--merge-output-format", "mp4", "-o", out_template]
     if cookies_from_browser:
         cmd += ["--cookies-from-browser", cookies_from_browser]
+    if cookies:
+        cmd += ["--cookies", cookies]
     cmd.append(url)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
@@ -479,6 +481,8 @@ def main():
                         help="Re-tag all camera roll clips, ignoring cache")
     parser.add_argument("--cookies-from-browser", metavar="BROWSER",
                         help="Pass cookies from browser to yt-dlp (e.g. chrome, firefox, edge)")
+    parser.add_argument("--cookies", metavar="FILE",
+                        help="Path to cookies.txt file exported from your browser")
     args = parser.parse_args()
 
     check_deps()
@@ -504,7 +508,7 @@ def main():
     else:
         if not args.url:
             parser.error("URL is required unless --skip-download is used")
-        video = download_reel(args.url, cookies_from_browser=args.cookies_from_browser)
+        video = download_reel(args.url, cookies_from_browser=args.cookies_from_browser, cookies=args.cookies)
 
     # Step 2
     shots = detect_shots(video, args.threshold)

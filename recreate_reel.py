@@ -190,7 +190,7 @@ def detect_shots(video: Path, threshold: float = 0.3) -> list[dict]:
     r = run(
         ["ffprobe", "-v", "quiet", "-print_format", "json",
          "-show_frames", "-f", "lavfi",
-         f"movie={video},select='gt(scene\\,{threshold})'",
+         f"movie={str(video).replace(chr(92), '/')},select='gt(scene\\,{threshold})'",
          "-show_entries", "frame=pts_time,pkt_pts_time"],
         capture=True,
     )

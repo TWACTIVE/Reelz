@@ -144,15 +144,16 @@ def describe_shot(client: anthropic.Anthropic, frames: list[Path], duration: flo
 
 # ── step 1: download ───────────────────────────────────────────────────────────
 
-def download_reel(url: str) -> Path:
+def download_reel(url: str, cookies_from_browser: str | None = None) -> Path:
     print(f"\n[1/8] Downloading reel from {url}")
     slug = hashlib.md5(url.encode()).hexdigest()[:8]
     out_template = str(DOWNLOADS_DIR / f"{slug}.%(ext)s")
-    r = subprocess.run(
-        ["yt-dlp", "--no-playlist", "-f", "mp4/bestvideo+bestaudio/best",
-         "--merge-output-format", "mp4", "-o", out_template, url],
-        capture_output=True, text=True,
-    )
+    cmd = ["yt-dlp", "--no-playlist", "-f", "mp4/bestvideo+bestaudio/best",
+           "--merge-output-format", "mp4", "-o", out_template]
+    if cookies_from_browser:
+        cmd += ["--cookies-from-browser", cookies_from_browser]
+    cmd.append(url)
+    r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print("ERROR: yt-dlp failed.\n")
         print(r.stderr[-1500:])
@@ -476,6 +477,8 @@ def main():
                         help="Skip download, reuse latest file in downloads/")
     parser.add_argument("--force-reindex", action="store_true",
                         help="Re-tag all camera roll clips, ignoring cache")
+    parser.add_argument("--cookies-from-browser", metavar="BROWSER",
+                        help="Pass cookies from browser to yt-dlp (e.g. chrome, firefox, edge)")
     args = parser.parse_args()
 
     check_deps()
@@ -501,7 +504,7 @@ def main():
     else:
         if not args.url:
             parser.error("URL is required unless --skip-download is used")
-        video = download_reel(args.url)
+        video = download_reel(args.url, cookies_from_browser=args.cookies_from_browser)
 
     # Step 2
     shots = detect_shots(video, args.threshold)

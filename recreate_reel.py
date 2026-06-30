@@ -153,7 +153,7 @@ def download_reel(url: str, cookies_from_browser: str | None = None, cookies: st
     if cookies_from_browser:
         cmd += ["--cookies-from-browser", cookies_from_browser]
     if cookies:
-        cmd += ["--cookies", cookies]
+        cmd += [f"--cookies={cookies}"]
     cmd.append(url)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:

@@ -275,7 +275,7 @@ def describe_trend_shots(client: anthropic.Anthropic, video: Path, shots: list[d
 
 # ── step 5: index camera roll ──────────────────────────────────────────────────
 
-def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = False) -> dict:
+def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = False, max_clips: int = 300) -> dict:
     print(f"\n[5/8] Indexing camera roll clips in {clips_dir}")
     index: dict = {}
     if CLIP_INDEX_PATH.exists() and not force:
@@ -287,6 +287,16 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
         if p.suffix.lower() in (".mp4", ".mov", ".m4v", ".avi", ".mkv")
     )
     print(f"    Found {len(clip_files)} clip(s)")
+    already_indexed = sum(1 for c in clip_files
+                          if (c.name + "|") in " ".join(index.keys()))
+    need_index = [c for c in clip_files
+                  if not any(k.startswith(c.name + "|") for k in index)]
+    if len(need_index) > max_clips:
+        import random
+        random.shuffle(need_index)
+        need_index = need_index[:max_clips]
+        print(f"    Sampling {max_clips} unindexed clips (use --max-clips N to change)")
+    clip_files = [c for c in clip_files if c not in need_index] + need_index
 
     BATCH_SIZE = 10
     pending = []  # list of (clip, key, dur, frame_path)
@@ -541,6 +551,8 @@ def main():
                         help="Skip download, reuse latest file in downloads/")
     parser.add_argument("--force-reindex", action="store_true",
                         help="Re-tag all camera roll clips, ignoring cache")
+    parser.add_argument("--max-clips", type=int, default=300,
+                        help="Max unindexed clips to tag per run (default 300)")
     parser.add_argument("--cookies-from-browser", metavar="BROWSER",
                         help="Pass cookies from browser to yt-dlp (e.g. chrome, firefox, edge)")
     parser.add_argument("--cookies", metavar="FILE",
@@ -582,7 +594,7 @@ def main():
     trend_shots = describe_trend_shots(client, video, shots)
 
     # Step 5
-    clip_index = index_clips(client, clips_dir, force=args.force_reindex)
+    clip_index = index_clips(client, clips_dir, force=args.force_reindex, max_clips=args.max_clips)
 
     if not clip_index:
         print("ERROR: no clips indexed. Check your --clips folder for .mp4/.mov files.")

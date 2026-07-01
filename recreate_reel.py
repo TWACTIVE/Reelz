@@ -312,9 +312,11 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
                 "filename": clip.name,
                 "path": str(clip),
                 "duration": dur,
-                "hash": file_hash(clip),
+                "hash": clip_hash,
                 "description": desc,
             }
+            # save after every clip so progress is never lost
+            CLIP_INDEX_PATH.write_text(json.dumps(index, indent=2))
         except Exception as e:
             print(f"    WARNING: failed to index {clip.name}: {e}")
 

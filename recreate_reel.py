@@ -87,13 +87,14 @@ def video_duration(path: Path) -> float:
 
 
 def extract_frames(video_path: Path, timestamps: list[float], out_dir: Path) -> list[Path]:
-    """Extract one frame per timestamp, return list of PNG paths."""
+    """Extract one frame per timestamp as JPEG ≤768px wide, return list of paths."""
     frames = []
     for i, ts in enumerate(timestamps):
-        out = out_dir / f"frame_{i:03d}.png"
+        out = out_dir / f"frame_{i:03d}.jpg"
         run(
             ["ffmpeg", "-y", "-ss", str(ts), "-i", str(video_path),
-             "-frames:v", "1", "-q:v", "2", str(out)],
+             "-frames:v", "1", "-vf", "scale='min(768,iw)':-2",
+             "-q:v", "5", str(out)],
             capture=True,
         )
         if out.exists():
@@ -115,7 +116,7 @@ def describe_shot(client: anthropic.Anthropic, frames: list[Path], duration: flo
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/png",
+                "media_type": "image/jpeg",
                 "data": encode_image(frame),
             },
         })
@@ -311,7 +312,7 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
             content.append({"type": "text", "text": f"=== Clip: {clip.name} ({dur:.1f}s) ==="})
             content.append({
                 "type": "image",
-                "source": {"type": "base64", "media_type": "image/png", "data": encode_image(frame_path)},
+                "source": {"type": "base64", "media_type": "image/jpeg", "data": encode_image(frame_path)},
             })
         content.append({
             "type": "text",

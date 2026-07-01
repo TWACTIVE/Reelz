@@ -550,6 +550,8 @@ def main():
                         help="Skip download, reuse latest file in downloads/")
     parser.add_argument("--force-reindex", action="store_true",
                         help="Re-tag all camera roll clips, ignoring cache")
+    parser.add_argument("--skip-index", action="store_true",
+                        help="Skip indexing entirely, use existing clip_index.json")
     parser.add_argument("--max-clips", type=int, default=300,
                         help="Max unindexed clips to tag per run (default 300)")
     parser.add_argument("--cookies-from-browser", metavar="BROWSER",
@@ -593,7 +595,12 @@ def main():
     trend_shots = describe_trend_shots(client, video, shots)
 
     # Step 5
-    clip_index = index_clips(client, clips_dir, force=args.force_reindex, max_clips=args.max_clips)
+    if args.skip_index and CLIP_INDEX_PATH.exists():
+        print(f"\n[5/8] Loading existing clip index (--skip-index)")
+        clip_index = json.loads(CLIP_INDEX_PATH.read_text())
+        print(f"    Loaded {len(clip_index)} clips")
+    else:
+        clip_index = index_clips(client, clips_dir, force=args.force_reindex, max_clips=args.max_clips)
 
     if not clip_index:
         print("ERROR: no clips indexed. Check your --clips folder for .mp4/.mov files.")

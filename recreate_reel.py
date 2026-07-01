@@ -67,10 +67,12 @@ def run(cmd, check=True, capture=False):
 
 
 def file_hash(path: Path) -> str:
+    """Fast partial hash: first 256KB + file size. Avoids reading whole file."""
     h = hashlib.md5()
+    size = path.stat().st_size
+    h.update(str(size).encode())
     with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+        h.update(f.read(262144))
     return h.hexdigest()[:12]
 
 
@@ -286,6 +288,64 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
     )
     print(f"    Found {len(clip_files)} clip(s)")
 
+    BATCH_SIZE = 10
+    pending = []  # list of (clip, key, dur, frame_path)
+
+    def flush_batch():
+        if not pending:
+            return
+        names = [p[0].name for p in pending]
+        print(f"    [tagging batch] {', '.join(names)}")
+        content = []
+        for clip, key, dur, frame_path in pending:
+            content.append({"type": "text", "text": f"=== Clip: {clip.name} ({dur:.1f}s) ==="})
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": encode_image(frame_path)},
+            })
+        content.append({
+            "type": "text",
+            "text": (
+                "For each clip above (identified by its === Clip: name === header), "
+                "output a JSON array where each element has:\n"
+                '{"filename":"...","shot_type":"...","energy_level":"low|medium|high",'
+                '"setting":"...","subject":"...","notable_action":"...","duration_seconds":<float>}\n'
+                "shot_type examples: wide establishing, medium, close-up, aerial, POV, selfie, b-roll\n"
+                f"There are {len(pending)} clips. Output ONLY the JSON array, no markdown fences."
+            ),
+        })
+        try:
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=150 * len(pending),
+                messages=[{"role": "user", "content": content}],
+            )
+            text = msg.content[0].text.strip()
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            results = json.loads(text.strip())
+            for i, (clip, key, dur, frame_path) in enumerate(pending):
+                try:
+                    r = results[i] if i < len(results) else {}
+                    desc = {
+                        "shot_type": r.get("shot_type", "unknown"),
+                        "energy_level": r.get("energy_level", "medium"),
+                        "setting": r.get("setting", "unknown"),
+                        "subject": r.get("subject", "unknown"),
+                        "notable_action": r.get("notable_action", "none"),
+                        "duration_seconds": dur,
+                    }
+                    index[key] = {"filename": clip.name, "path": str(clip),
+                                  "duration": dur, "hash": key.split("|")[1], "description": desc}
+                except Exception as e2:
+                    print(f"    WARNING: parse failed for {clip.name}: {e2}")
+            CLIP_INDEX_PATH.write_text(json.dumps(index, indent=2))
+        except Exception as e:
+            print(f"    WARNING: batch failed: {e}")
+        pending.clear()
+
     for clip in clip_files:
         try:
             clip_hash = file_hash(clip)
@@ -294,31 +354,22 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
             continue
         key = clip.name + "|" + clip_hash
         if key in index:
-            print(f"    [cached] {clip.name}")
             continue
 
-        print(f"    [tagging] {clip.name}")
         try:
             dur = video_duration(clip)
-            mid = dur / 2
-            ts_list = [dur * t for t in (0.2, 0.5, 0.8)]
             frame_dir = TMP_DIR / f"clip_{clip.stem[:20]}"
             frame_dir.mkdir(exist_ok=True)
-            frames = extract_frames(clip, ts_list, frame_dir)
+            frames = extract_frames(clip, [dur * 0.5], frame_dir)
             if not frames:
                 raise ValueError("no frames extracted")
-            desc = describe_shot(client, frames, dur)
-            index[key] = {
-                "filename": clip.name,
-                "path": str(clip),
-                "duration": dur,
-                "hash": clip_hash,
-                "description": desc,
-            }
-            # save after every clip so progress is never lost
-            CLIP_INDEX_PATH.write_text(json.dumps(index, indent=2))
+            pending.append((clip, key, dur, frames[0]))
+            if len(pending) >= BATCH_SIZE:
+                flush_batch()
         except Exception as e:
-            print(f"    WARNING: failed to index {clip.name}: {e}")
+            print(f"    WARNING: failed to prepare {clip.name}: {e}")
+
+    flush_batch()
 
     CLIP_INDEX_PATH.write_text(json.dumps(index, indent=2))
     print(f"    Index saved → clip_index.json ({len(index)} clips)")

@@ -288,10 +288,8 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
         if p.suffix.lower() in (".mp4", ".mov", ".m4v", ".avi", ".mkv")
     )
     print(f"    Found {len(clip_files)} clip(s)")
-    already_indexed = sum(1 for c in clip_files
-                          if (c.name + "|") in " ".join(index.keys()))
-    need_index = [c for c in clip_files
-                  if not any(k.startswith(c.name + "|") for k in index)]
+    indexed_names = {v["filename"] for v in index.values()}
+    need_index = [c for c in clip_files if c.name not in indexed_names]
     if len(need_index) > max_clips:
         import random
         random.shuffle(need_index)
@@ -364,7 +362,7 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
             print(f"    [skipped] {clip.name} (not fully downloaded from iCloud)")
             continue
         key = clip.name + "|" + clip_hash
-        if key in index:
+        if key in index or clip.name in indexed_names:
             continue
 
         try:

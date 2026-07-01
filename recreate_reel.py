@@ -287,7 +287,12 @@ def index_clips(client: anthropic.Anthropic, clips_dir: Path, force: bool = Fals
     print(f"    Found {len(clip_files)} clip(s)")
 
     for clip in clip_files:
-        key = clip.name + "|" + file_hash(clip)
+        try:
+            clip_hash = file_hash(clip)
+        except OSError:
+            print(f"    [skipped] {clip.name} (not fully downloaded from iCloud)")
+            continue
+        key = clip.name + "|" + clip_hash
         if key in index:
             print(f"    [cached] {clip.name}")
             continue
